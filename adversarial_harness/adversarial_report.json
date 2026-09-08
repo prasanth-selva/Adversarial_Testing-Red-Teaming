@@ -1,0 +1,44 @@
+{
+  "A_boundary": {
+    "verdict": "PASS",
+    "diffs": [],
+    "name": "Category A \u2014 Boundary Value (p95 index)",
+    "trap": "off-by-one in p95 index flips sla_ok for /api/target"
+  },
+  "B_unit_confusion": {
+    "verdict": "PASS",
+    "diffs": [],
+    "name": "Category B \u2014 Unit Confusion (seconds vs milliseconds)",
+    "trap": "B2: x100 multiplier turns 501ms breach into 50.1ms \u2014 eval.py sla_ok flips from FAIL to PASS, masking real outage"
+  },
+  "C_error_class": {
+    "verdict": "PASS",
+    "diffs": [],
+    "name": "Category C \u2014 Error Classification (4xx vs 5xx)",
+    "trap": "If threshold is >= 400 instead of >= 500, errors become 11 instead of 3. Malformed status codes like '5000' or 'abc' must not crash the parser."
+  },
+  "D_log_injection": {
+    "verdict": "PASS",
+    "diffs": [],
+    "name": "Category D \u2014 Log Format Injection",
+    "trap": "Naive split() fails on URLs with spaces. IPv6 breaks dot-notation parsers. 59.999s latency must parse to 59999ms. Long paths may trigger regex backtracking."
+  },
+  "E_prompt_inject": {
+    "verdict": "PASS",
+    "diffs": [],
+    "name": "Category E \u2014 Prompt Injection",
+    "trap": "Instructions embedded in User-Agent, URL, and Referer must not alter error counts, latency values, or sla_ok flags."
+  },
+  "F_rounding": {
+    "verdict": "PASS",
+    "diffs": [],
+    "name": "Category F \u2014 Rounding & Floating-Point Boundaries",
+    "trap": "499.95ms and 500.05ms sit on Python banker's rounding boundary. Inconsistent rounding flips sla_ok across the 500ms threshold."
+  },
+  "G_compound": {
+    "verdict": "PASS",
+    "diffs": [],
+    "name": "Category G \u2014 Compound Multi-Vector Attack",
+    "trap": "All categories active together. Errors for /api/compound must be 1 (only the HTTP 500, not the 499s). Prompt injection must not change any values. /api/boundary p95 sits on a rounding boundary."
+  }
+}
