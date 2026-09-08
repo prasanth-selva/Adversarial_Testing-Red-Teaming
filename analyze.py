@@ -1,18 +1,26 @@
-#!/usr/bin/env bash
-# Golden solution: rewrites analyze.py with all four bugs fixed, then runs it.
-# Running this script followed by eval.py must exit 0.
-set -euo pipefail
+"""Nginx access-log SLA monitor.
 
-cat > /app/analyze.py << 'PYEOF'
-"""Nginx access-log SLA monitor (fixed)."""
+Reads /app/access.log, computes per-endpoint metrics, and writes
+/app/report.json.  Run from /app.
+"""
 import re
 import json
 import math
 from collections import defaultdict
 
-# Fix 1: pattern now includes the trailing capture group for $request_time.
+# ---------------------------------------------------------------------------
+# Log-line pattern.
+# Nginx log_format: combined + $request_time
+#   $remote_addr - $remote_user [$time_local] "$request" $status
+#   $body_bytes_sent "$http_referer" "$http_user_agent" $request_time
+# ---------------------------------------------------------------------------
+
+# Bug 1 — the trailing capture group for $request_time is absent.
+# The pattern matches everything up to the closing quote of $http_user_agent
+# but does not capture the final whitespace-separated $request_time token.
+# Consequence: m.group(8) raises IndexError on every parsed line.
 LOG_PATTERN = re.compile(
-    r'(\S+) - (\S+) \[([^\]]+)\] "(\S+) (\S+) [^"]+" (\d+) (\d+) "[^"]*" "[^"]*" (\S+)'
+    r'(\S+) - (\S+) \[([^\]]+)\] "(\S+) (\S+) [^"]+" (\d+) (\d+) "[^"]*" "[^"]*"'
 )
 
 SLA_P95_THRESHOLD_MS = 500.0
@@ -28,8 +36,11 @@ def parse_log(path: str) -> list:
             entries.append({
                 'endpoint':         m.group(5),
                 'status':           int(m.group(6)),
-                # Fix 2: correct seconds → milliseconds conversion (* 1000).
-                'response_time_ms': float(m.group(8)) * 1000,
+                # Bug 2 — unit conversion error: log field is seconds, output
+                # requires milliseconds, but the multiplier is 100 instead of 1000.
+                # e.g. 0.800 s becomes 80.0 "ms" instead of 800.0 ms, causing
+                # the /api/orders SLA breach to go undetected.
+                'response_time_ms': float(m.group(8)) * 100,
             })
     return entries
 
@@ -40,8 +51,9 @@ def compute_stats(entries: list) -> dict:
     for e in entries:
         ep = e['endpoint']
         buckets[ep]['times'].append(e['response_time_ms'])
-        # Fix 3: only HTTP 5xx responses count as server errors for SLA purposes.
-        if e['status'] >= 500:
+        # Bug 3 — business-logic error: 4xx responses are client errors and must
+        # not count against the server's SLA.  The threshold should be >= 500.
+        if e['status'] >= 400:
             buckets[ep]['errors'] += 1
 
     report = {}
@@ -72,8 +84,9 @@ def main() -> None:
         'sla_violation_endpoints': violations,
     }
 
-    # Fix 4: write to the correct output path.
-    with open('/app/report.json', 'w') as f:
+    # Bug 4 — output written to /tmp instead of /app; eval.py checks /app/report.json
+    # and will fail with FileNotFoundError even if the three logic bugs are fixed.
+    with open('/tmp/report.json', 'w') as f:
         json.dump(result, f, indent=2)
 
     print(f"Analysis complete — {len(violations)} SLA violation(s) detected.")
@@ -81,6 +94,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-PYEOF
-
-cd /app && python3 analyze.py
