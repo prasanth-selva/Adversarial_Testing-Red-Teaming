@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Golden solution: rewrites analyze.py with all four bugs fixed, then runs it.
-# Running this script followed by eval.py must exit 0.
 set -euo pipefail
 
 cat > /app/analyze.py << 'PYEOF'
@@ -10,7 +8,6 @@ import json
 import math
 from collections import defaultdict
 
-# Fix 1: pattern now includes the trailing capture group for $request_time.
 LOG_PATTERN = re.compile(
     r'(\S+) - (\S+) \[([^\]]+)\] "(\S+) (\S+) [^"]+" (\d+) (\d+) "[^"]*" "[^"]*" (\S+)'
 )
@@ -28,7 +25,6 @@ def parse_log(path: str) -> list:
             entries.append({
                 'endpoint':         m.group(5),
                 'status':           int(m.group(6)),
-                # Fix 2: correct seconds → milliseconds conversion (* 1000).
                 'response_time_ms': float(m.group(8)) * 1000,
             })
     return entries
@@ -40,7 +36,6 @@ def compute_stats(entries: list) -> dict:
     for e in entries:
         ep = e['endpoint']
         buckets[ep]['times'].append(e['response_time_ms'])
-        # Fix 3: only HTTP 5xx responses count as server errors for SLA purposes.
         if e['status'] >= 500:
             buckets[ep]['errors'] += 1
 
@@ -72,7 +67,6 @@ def main() -> None:
         'sla_violation_endpoints': violations,
     }
 
-    # Fix 4: write to the correct output path.
     with open('/app/report.json', 'w') as f:
         json.dump(result, f, indent=2)
 
@@ -84,3 +78,4 @@ if __name__ == '__main__':
 PYEOF
 
 cd /app && python3 analyze.py
+
