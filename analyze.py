@@ -3,13 +3,13 @@
 Reads /app/access.log, computes per-endpoint metrics, and writes
 /app/report.json.  Run from /app.
 """
-import re
 import json
-import math
+import re
 from collections import defaultdict
 
 LOG_PATTERN = re.compile(
-    r'(\S+) - (\S+) \[([^\]]+)\] "(\S+) (\S+) [^"]+" (\d+) (\d+) "[^"]*" "[^"]*"'
+    r'(\S+) - (\S+) \[([^\]]+)\] "(\S+) (\S+) [^"]+" '
+    r'(\d+) (\d+) "[^"]*" "[^"]*" (\S+)'
 )
 
 SLA_P95_THRESHOLD_MS = 500.0
@@ -25,7 +25,7 @@ def parse_log(path: str) -> list:
             entries.append({
                 'endpoint':         m.group(5),
                 'status':           int(m.group(6)),
-                'response_time_ms': float(m.group(8)) * 100,
+                'response_time_ms': float(m.group(9)) * 1000,
             })
     return entries
 
@@ -36,7 +36,7 @@ def compute_stats(entries: list) -> dict:
     for e in entries:
         ep = e['endpoint']
         buckets[ep]['times'].append(e['response_time_ms'])
-        if e['status'] >= 400:
+        if e['status'] >= 500:
             buckets[ep]['errors'] += 1
 
     report = {}
@@ -45,7 +45,7 @@ def compute_stats(entries: list) -> dict:
         n     = len(times)
         s     = sorted(times)
         avg   = round(sum(times) / n, 1)
-        p95   = round(s[math.floor(n * 0.95)], 1)
+        p95   = round(s[int(n * 0.95)], 1)
         report[ep] = {
             'requests': n,
             'errors':   data['errors'],
@@ -57,7 +57,8 @@ def compute_stats(entries: list) -> dict:
 
 
 def main() -> None:
-    entries    = parse_log('/app/access.log')
+    root = '/app' if __import__('os').path.exists('/app/access.log') else __file__.rsplit('/', 1)[0]
+    entries = parse_log(f'{root}/access.log')
     stats      = compute_stats(entries)
     violations = [ep for ep, s in stats.items() if not s['sla_ok']]
 
@@ -67,7 +68,7 @@ def main() -> None:
         'sla_violation_endpoints': violations,
     }
 
-    with open('/tmp/report.json', 'w') as f:
+    with open(f'{root}/report.json', 'w') as f:
         json.dump(result, f, indent=2)
 
     print(f"Analysis complete — {len(violations)} SLA violation(s) detected.")

@@ -67,6 +67,7 @@ EOF
 COPY analyze.py /app/analyze.py
 COPY eval.py    /app/eval.py
 COPY solve.sh   /app/solve.sh
+COPY access.log /app/access.log
 RUN chmod +x /app/solve.sh
 
 # Default: run the broken analyzer so the baseline eval.py fails
